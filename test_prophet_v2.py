@@ -112,8 +112,6 @@ def get_prophet_forecasting(group_name, data):
 
 #	data = group.reset_index()
 #	data.columns = ['ds', 'y']
-	
-	data['y'][data.y <= 0] = 0.0
 
 	# Remove first null rows
 	first_row = 0
@@ -125,7 +123,15 @@ def get_prophet_forecasting(group_name, data):
 	
 	
 	data = data.loc[first_row:, :]
-	data['y'][data.y > 0] = np.log(data['y'][data['y'] > 0].tolist())
+
+#	min_value = min(data.y)
+#	non_zero_inds = data.y > 0
+#	data.y[non_zero_inds] = data.y[non_zero_inds] + min_value
+	
+	non_zero_inds = data.y > 0
+	data['y'][data.y <= 0] = 0.0
+	
+	data['y'][non_zero_inds] = np.log(data['y'][non_zero_inds].tolist())
 	
 	if len(data) == 0:
 #		frcst = forecastings[-1][1]
@@ -139,6 +145,7 @@ def get_prophet_forecasting(group_name, data):
 			m = Prophet(growth='logistic', weekly_seasonality=False, daily_seasonality=False)
 			m.add_seasonality(name='monthly', period=30.5, fourier_order=5)
 			
+#			cap = max(data.y)*1.2
 			cap = max(data.y)
 			data['cap'] = cap
 			m.fit(data)
@@ -157,8 +164,10 @@ def get_prophet_forecasting(group_name, data):
 #			print('*****', list(frcst[frcst[field] > 0][field]))
 #			print(np.exp([2.02]))
 #		
+	res = np.exp(frcst['yhat'].values)
+#	res = data['y'] - min_value
 		
-	return [group_name[0], group_name[1], np.exp(frcst['yhat'].values)], [m, frcst]
+	return [group_name[0], group_name[1], res], [m, frcst]
 
 
 # %%
@@ -183,9 +192,32 @@ for i, r in grouped_groups.iterrows():
 
 submission_template_clean = submission_template.copy()
 
-for col in submission_template_clean.columns[2:]:
-	submission_template_clean.loc[:, col] = submission_template_clean[col].apply(lambda x: x if x > 9000 else 9000)
+val = 10000
 
+for col in submission_template_clean.columns[2:]:
+	submission_template_clean.loc[:, col] = submission_template_clean[col].apply(lambda x: x if x < val else val)
+
+
+# %%
+
+if False:
+	submission_template_clean = submission_template.copy()
+	max_value = 10000
+	
+	
+	for i in range(len(submission_template_clean)):
+		
+		prev_val = max_value
+		
+		for j in range(2,submission_template_clean.shape[1]):
+			
+			if submission_template_clean.iloc[i, j] > max_value:
+				submission_template_clean.iloc[i, j] = prev_val
+			else:
+				prev_val = submission_template_clean.iloc[i, j]
+
+
+# %%
 
 filename = dir_results + str(len(os.listdir(dir_results))) + '_team15_prft_v2.csv'
 print(filename)
