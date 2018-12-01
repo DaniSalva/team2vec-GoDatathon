@@ -108,7 +108,7 @@ from joblib import Parallel, delayed
 plot_forecasting = False
 
 
-def get_prophet_forecasting(group_name, data):
+def get_prophet_forecasting(group_name, data, logs=True):
 
 #	data = group.reset_index()
 #	data.columns = ['ds', 'y']
@@ -131,7 +131,7 @@ def get_prophet_forecasting(group_name, data):
 	non_zero_inds = data.y > 0
 	data['y'][data.y <= 0] = 0.0
 	
-	data['y'][non_zero_inds] = np.log(data['y'][non_zero_inds].tolist())
+	if logs: data['y'][non_zero_inds] = np.log(data['y'][non_zero_inds].tolist())
 	
 	if len(data) == 0:
 #		frcst = forecastings[-1][1]
@@ -157,14 +157,15 @@ def get_prophet_forecasting(group_name, data):
 		except:
 			return [group_name[0], group_name[1], np.zeros(12)], [None, None]
 
-#		for field in ['yhat', 'yhat_lower', 'yhat_upper']: 
+		for field in ['yhat', 'yhat_lower', 'yhat_upper']: 
 #			print('---- ',list(frcst[frcst[field] > 0][field]))
 #			print(sum(frcst[field] > 0))
-#			frcst.loc[frcst[field] > 0][field] = np.exp(list(frcst.loc[frcst[field] > 0][field].values))
+			frcst[field] = np.exp(list(frcst[field].values))
 #			print('*****', list(frcst[frcst[field] > 0][field]))
 #			print(np.exp([2.02]))
 #		
-	res = np.exp(frcst['yhat'].values)
+	res = frcst['yhat'].values
+	if logs: res = np.exp(res)
 #	res = data['y'] - min_value
 		
 	return [group_name[0], group_name[1], res], [m, frcst]
@@ -173,19 +174,26 @@ def get_prophet_forecasting(group_name, data):
 # %%
 
 for i, r in grouped_groups.iterrows():
-#	print(r.Cluster, r['Brand Group'])
+	print(r.Cluster, r['Brand Group'])
 	
 	data = pd.DataFrame({'ds': dfsales2.columns[2:], 'y':r.res})
 	group_name = (r.Cluster, r['Brand Group'])
 	
-	[_,_,res], [model, frcst] = get_prophet_forecasting(group_name, data)
+	[_,_,res], [model, frcst] = get_prophet_forecasting(group_name, data, logs=True)
 	
 	
 	print(group_name)
 	row = submission_template[(submission_template.Cluster==r.Cluster) & (submission_template['Brand Group'] == r['Brand Group'])]
 	submission_template.iloc[row.index[0], 2:] = res[-12:]
 	
+	model.plot(frcst)
+	plt.show()
+	plt.plot(frcst['ds'][-12-len(res[:-12]):-12], frcst['yhat'][:-12])
+	plt.plot(frcst['ds'][-12:], frcst['yhat'][-12:])
+	plt.show()
+
 #	break
+	input()
 
 
 # %%
